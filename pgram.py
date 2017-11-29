@@ -1,6 +1,6 @@
 from pylab import *
 
-def pgram(ts, ys, dys, P):
+def pgram(ts, ys, dys, P, nharmonics=1):
     r"""Returns the estimated mean and sine- and cosine-term coefficients
     for the time series.
 
@@ -12,8 +12,12 @@ def pgram(ts, ys, dys, P):
 
     :param P: The period of the sinusoidal components.
 
-    :return: ``(mu, A, B)``, where ``y ~ mu + A*cos(2*pi*t/P) +
-      B*sin(2*pi*t/P)``
+    :param nharmonics: The number of harmonics of the period, ``P`` to
+      consider.
+
+    :return: ``((mu, A, B), rss)``, where ``y ~ mu + A*cos(2*pi*t/P) +
+      B*sin(2*pi*t/P)`` (or equivalent for the multiple-harmonic
+      return), and ``rss`` is the residuals squared and summed.
 
     The coefficients are determined by minimising the squared
     residual, weighted by the observational uncertaintes.  This is the
@@ -26,13 +30,30 @@ def pgram(ts, ys, dys, P):
 
     (This method is sometimes called "weighted least squares.")
 
+    If ``nharmonics > 1``, then the coefficients will be returned in
+    the order ``[A1, A2, A3, ..., B1, B2, B3, ...]`` where ``A1`` is
+    the coefficient in front of the fundamental cosine term, ``A2`` in
+    front of the first harmonic cosine term, etc, and ``B1``, ``B2``,
+    etc for the sine terms.
+
     """
 
     # It is easiest to do this via standard linear algebra operations;
     # first, we form the "response matrix," M, so that, given
     # parameters p = (mu, A, B), we have y = M*p.
-    cos_terms = cos(2.0*pi*ts/P)
-    sin_terms = sin(2.0*pi*ts/P)
+    if nharmonics == 1:
+        cos_terms = cos(2.0*pi*ts/P)
+        sin_terms = sin(2.0*pi*ts/P)
+    else:
+        cos_terms = []
+        sin_terms = []
+        for i in range(nharmonics):
+            j = i + 1
+            cos_terms.append(cos(2.0*pi*j*ts/P))
+            sin_terms.append(sin(2.0*pi*j*ts/P))
+        cos_terms = transpose(array(cos_terms))
+        sin_terms = transpose(array(sin_terms))
+        
     const_terms = ones(ts.shape[0])
 
     M = column_stack((const_terms, cos_terms, sin_terms))
@@ -43,6 +64,6 @@ def pgram(ts, ys, dys, P):
     # vector so that the *rows* of M are divided by the corresponding
     # dys.
 
-    p, _, _, _ = np.linalg.lstsq(M / reshape(dys, (-1, 1)), ys/dys)
+    p, rss, _, _ = np.linalg.lstsq(M / reshape(dys, (-1, 1)), ys/dys)
 
-    return p
+    return p, rss
